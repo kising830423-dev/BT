@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Checkout</title>
+  <script src="https://js.braintreegateway.com/web/dropin/1.43.0/js/dropin.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f0eeeb; --card: #ffffff; --text: #1a1a1a; --muted: #6b6b6b;
+      --border: #e2e2e2; --accent: #1a1a1a; --accent-blue: #1a6cf5;
+      --selected-bg: #eef4ff; --selected-border: #b8d0fb; --radius: 20px; --radius-sm: 12px;
+    }
+    body { font-family: 'Sora', sans-serif; background: var(--bg); color: var(--text);
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+      padding: 32px 16px 64px; }
+    .page-header { text-align: center; margin-bottom: 28px; animation: fadeUp 0.5s ease both; }
+    .page-header h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; }
+    .page-header p { margin-top: 8px; font-size: 15px; color: var(--muted); }
+    .card { width: 100%; max-width: 600px; background: var(--card); border-radius: var(--radius);
+      padding: 28px 24px; box-shadow: 0 2px 20px rgba(0,0,0,0.07); animation: fadeUp 0.5s ease 0.1s both; }
+    .card + .card { margin-top: 16px; }
+    .card-title { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+    .card-subtitle { font-size: 14px; color: var(--muted); margin-top: 4px; }
+    .billing-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 20px 0; }
+    .billing-option { position: relative; cursor: pointer; }
+    .billing-option input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+    .billing-option-box { border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+      padding: 14px 16px; transition: border-color 0.2s, background 0.2s;
+      display: flex; flex-direction: column; gap: 6px; }
+    .billing-option input:checked ~ .billing-option-box { border-color: var(--selected-border); background: var(--selected-bg); }
+    .billing-radio { width: 20px; height: 20px; border: 2px solid #ccc; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; transition: border-color 0.2s; }
+    .billing-option input:checked ~ .billing-option-box .billing-radio { border-color: var(--accent-blue); }
+    .billing-radio::after { content: ''; width: 10px; height: 10px; border-radius: 50%;
+      background: var(--accent-blue); transform: scale(0); transition: transform 0.2s; }
+    .billing-option input:checked ~ .billing-option-box .billing-radio::after { transform: scale(1); }
+    .billing-price { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; margin-top: 4px; }
+    .billing-period { font-size: 13px; color: var(--muted); }
+    .save-badge { display: inline-block; background: var(--selected-bg); color: var(--accent-blue);
+      font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 20px;
+      border: 1px solid var(--selected-border); align-self: flex-start; }
+    .cta-btn { width: 100%; padding: 16px; background: var(--accent); color: #fff; border: none;
+      border-radius: var(--radius-sm); font-family: 'Sora', sans-serif; font-size: 16px;
+      font-weight: 600; cursor: pointer; transition: opacity 0.2s, transform 0.15s; position: relative; }
+    .cta-btn:hover:not(:disabled) { opacity: 0.88; }
+    .cta-btn:active:not(:disabled) { transform: scale(0.99); }
+    .cta-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .cta-btn.loading .btn-text { visibility: hidden; }
+    .cta-btn.loading::after { content: ''; position: absolute; inset: 0; margin: auto;
+      width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+    .divider { height: 1px; background: var(--border); margin: 22px 0; }
+    .features-heading { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 14px; }
+    .features-list { list-style: none; display: flex; flex-direction: column; gap: 11px; }
+    .features-list li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.5; }
+    .check-icon { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
+    .limits-link { display: inline-block; margin-top: 18px; font-size: 13px; color: var(--muted);
+      text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+    .payment-section { width: 100%; max-width: 600px; margin-top: 16px; animation: fadeUp 0.5s ease 0.2s both; }
+    .section-label { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+      letter-spacing: 0.08em; margin-bottom: 12px; }
+    .dropin-wrapper { background: var(--card); border-radius: var(--radius); padding: 20px;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.07); min-height: 80px; }
+    #result { display: none; width: 100%; max-width: 600px; margin-top: 16px; padding: 18px 20px;
+      border-radius: var(--radius-sm); font-size: 14px; line-height: 1.7; animation: fadeUp 0.3s ease both; }
+    #result.success { background: #edf7f1; border: 1.5px solid #a3d9b8; color: #1a4a30; }
+    #result.error   { background: #fdf0ed; border: 1.5px solid #f0b8ae; color: #5c1a0a; }
+    .result-title { font-weight: 700; margin-bottom: 10px; font-size: 15px; }
+    .tx-row { display: flex; justify-content: space-between; padding: 5px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 13px; }
+    .tx-row:last-child { border-bottom: none; }
+    .tx-row .k { opacity: 0.65; } .tx-row .v { font-weight: 600; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <h1>Get more Claude</h1>
+    <p>Choose the plan right for you</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Pro</div>
+    <div class="card-subtitle">For everyday productivity</div>
+
+    <div class="billing-options">
+      <label class="billing-option">
+        <input type="radio" name="billing" value="20.00" checked onchange="selectedAmount=this.value" />
+        <div class="billing-option-box">
+          <div class="billing-radio"></div>
+          <div class="billing-price">US$20.00</div>
+          <div class="billing-period">Billed monthly</div>
+        </div>
+      </label>
+      <label class="billing-option">
+        <input type="radio" name="billing" value="216.00" onchange="selectedAmount=this.value" />
+        <div class="billing-option-box">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="billing-radio"></div>
+            <span class="save-badge">Save 10%</span>
+          </div>
+          <div class="billing-price">US$216.00</div>
+          <div class="billing-period">Billed annually</div>
+        </div>
+      </label>
+    </div>
+
+    <button class="cta-btn" id="pay-btn" disabled>
+      <span class="btn-text">Get Pro plan</span>
+    </button>
+
+    <div class="divider"></div>
+
+    <p class="features-heading">Everything in Free, plus:</p>
+    <ul class="features-list">
+      <li>
+        <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Send more messages with Claude Pro
+      </li>
+      <li>
+        <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Access more Claude models
+      </li>
+      <li>
+        <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Organize chats and documents with unlimited Projects
+      </li>
+    </ul>
+    <span class="limits-link">Limits apply</span>
+  </div>
+
+  <div class="payment-section">
+    <p class="section-label">Payment details</p>
+    <div class="dropin-wrapper">
+      <div id="dropin-container"></div>
+    </div>
+  </div>
+
+  <div id="result"></div>
+
+  <script>
+    const API_BASE = "";
+    let dropinInstance = null;
+    let selectedAmount = "20.00";
+
+    async function initDropin() {
+      try {
+        const res = await fetch(`${API_BASE}/api/client-token`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { clientToken } = await res.json();
+        dropinInstance = await braintree.dropin.create({ authorization: clientToken, container: "#dropin-container" });
+        document.getElementById("pay-btn").disabled = false;
+      } catch (err) {
+        document.getElementById("pay-btn").disabled = false;
+        console.warn("Drop-in init:", err.message);
+      }
+    }
+
+    document.getElementById("pay-btn").addEventListener("click", async () => {
+      if (!dropinInstance) { showResult("error", "未初始化", { 原因: "请检查后端服务" }); return; }
+      const btn = document.getElementById("pay-btn");
+      btn.classList.add("loading"); btn.disabled = true; hideResult();
+      try {
+        const { nonce } = await dropinInstance.requestPaymentMethod();
+        const res = await fetch(`${API_BASE}/api/checkout`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentMethodNonce: nonce, amount: selectedAmount }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          showResult("success", "✓ Payment successful", {
+            "Transaction ID": data.transactionId, "Status": data.status,
+            "Amount": `$${data.amount}`, "Method": data.paymentType,
+            "Time": new Date(data.createdAt).toLocaleString(),
+          });
+        } else {
+          showResult("error", "✗ Payment failed", { Reason: data.message });
+        }
+      } catch (err) {
+        showResult("error", "✗ Error", { Detail: err.message });
+      } finally { btn.classList.remove("loading"); btn.disabled = false; }
+    });
+
+    function showResult(type, title, rows) {
+      const el = document.getElementById("result");
+      el.className = type; el.style.display = "block";
+      el.innerHTML = `<p class="result-title">${title}</p>` +
+        Object.entries(rows).map(([k,v]) => `<div class="tx-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    function hideResult() { document.getElementById("result").style.display = "none"; }
+    initDropin();
+  </script>
+</body>
+</html>
